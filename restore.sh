@@ -35,6 +35,10 @@ cp local-bin/zed-token ~/.local/bin/zed-token
 cp local-bin/pi-zed    ~/.local/bin/pi-zed 2>/dev/null || true
 chmod +x ~/.local/bin/zed-token
 
+# 7b. pi-save command
+cp pi-save ~/.local/bin/pi-save
+chmod +x ~/.local/bin/pi-save
+
 # 7. Cron job (crontab won't survive a restore — remind user)
 echo ""
 echo "─────────────────────────────────────────────────"
