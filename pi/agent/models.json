@@ -26,7 +26,7 @@
     "9router": {
       "baseUrl": "http://localhost:20128/v1",
       "api": "openai-completions",
-      "apiKey": "sk-71b6ab38b4a18435-h1a8cr-974b5777",
+      "apiKey": "$NINE_ROUTER_KEY",
       "models": [
         {
           "id": "oc/big-pickle",
