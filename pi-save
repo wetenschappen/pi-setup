@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# ─── pi-save — backup current pi config to git and push to GitHub ─────────
+set -euo pipefail
+
+REPO="$HOME/pi-setup"
+
+if [ ! -d "$REPO/.git" ]; then
+  echo "Error: $REPO is not a git repository."
+  echo "Run: git clone <your-repo-url> $REPO"
+  exit 1
+fi
+
+cd "$REPO"
+
+# ── Sync files ────────────────────────────────────────────────────────────
+cp "$HOME/.pi/agent/models.json"                          pi/agent/models.json
+cp "$HOME/.pi/agent/settings.json"                        pi/agent/settings.json
+cp "$HOME/.pi/agent/extensions/pi-custom.ts"              pi/agent/extensions/pi-custom.ts
+cp "$HOME/.pi/agent/extensions/proxy-command.ts"          pi/agent/extensions/proxy-command.ts
+cp "$HOME/.pi/agent/themes/high-contrast-dark.json"       pi/agent/themes/high-contrast-dark.json
+cp "$HOME/.zed-proxy/zed-proxy.js"                        zed-proxy/zed-proxy.js
+cp "$HOME/.local/bin/zed-token"                           local-bin/zed-token
+[ -f "$HOME/.local/bin/pi-zed" ] && cp "$HOME/.local/bin/pi-zed" local-bin/pi-zed
+
+# Directories (rsync-like behaviour without needing rsync)
+rm -rf pi/agent/extensions/pdf-tools
+rm -rf pi/agent/skills/pi-pdf
+cp -r "$HOME/.pi/agent/extensions/pdf-tools"              pi/agent/extensions/pdf-tools
+cp -r "$HOME/.pi/agent/skills/pi-pdf"                     pi/agent/skills/pi-pdf
+
+# ── Check for changes ─────────────────────────────────────────────────────
+if git diff --quiet && git diff --cached --quiet && ! git ls-files --others --exclude-standard | grep -q .; then
+  echo "Nothing changed — nothing to commit."
+  exit 0
+fi
+
+# ── Commit and push ───────────────────────────────────────────────────────
+git add -A
+git commit -m "pi-save $(date +%Y-%m-%d_%H:%M)"
+git push
+
+echo ""
+echo "✅ pi config saved and pushed to GitHub"
+echo "   $(git log --oneline -1)"
