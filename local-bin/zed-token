@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+import os, re, sys, json, base64, pwd
+
+def find_zed_pid():
+    pids = []
+    for sub in os.listdir('/proc'):
+        if sub.isdigit():
+            try:
+                with open(os.path.join('/proc', sub, 'cmdline'), 'r') as f:
+                    cmd = f.read()
+                    if 'zed-editor' in cmd and '--crash-handler' not in cmd:
+                        pids.append(int(sub))
+            except: pass
+    return pids
+
+def scan_mem(pid):
+    try:
+        maps_file = open(f'/proc/{pid}/maps', 'r')
+        mem_file  = open(f'/proc/{pid}/mem', 'rb')
+    except PermissionError:
+        print(f"Permission denied for PID {pid}. Run with sudo.")
+        return []
+    except: return []
+    
+    jwt_pattern = re.compile(br'eyJ[A-Za-z0-9-_=]+\.eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_~+/=]+')
+    tokens = set()
+    for line in maps_file:
+        parts = line.strip().split()
+        if len(parts) < 2: continue
+        addr_range, perms = parts[0], parts[1]
+        
+        # Only scan private writable regions
+        if perms != 'rw-p': continue
+        
+        # If mapping is linked to a system path or shared library, skip it to save time
+        if len(parts) >= 6:
+            path = parts[-1]
+            if (path.endswith('.so') or '.so.' in path or 
+                path.startswith('/usr/lib') or path.startswith('/lib') or 
+                path.startswith('/usr/share') or path.startswith('/var') or
+                path.startswith('/dev/') or path.startswith('/run/')):
+                continue
+                
+        start_str, end_str = addr_range.split('-')
+        start, end = int(start_str, 16), int(end_str, 16)
+        
+        # Skip mappings larger than 100MB to prevent hangs/memory spikes
+        if end - start > 100 * 1024 * 1024: continue
+        try:
+            mem_file.seek(start)
+            data = mem_file.read(end - start)
+            for match in jwt_pattern.finditer(data):
+                try:
+                    token = match.group(0).decode('utf-8')
+                    if "eyJhbGciOiJIUzI1NiJ9" in token:
+                        tokens.add(token)
+                except: pass
+        except: pass
+    maps_file.close(); mem_file.close()
+    return list(tokens)
+
+def main():
+    pids = find_zed_pid()
+    if not pids:
+        print("Zed editor is not running. Launch Zed and log in first.")
+        sys.exit(1)
+    
+    print(f"Scanning memory of Zed (PIDs: {pids})...")
+    all_tokens = []
+    for pid in pids:
+        tokens = scan_mem(pid)
+        for t in tokens:
+            try:
+                payload_b64 = t.split('.')[1]
+                padding = 4 - len(payload_b64) % 4
+                if padding != 4: payload_b64 += '=' * padding
+                jwt_payload = json.loads(base64.b64decode(payload_b64).decode('utf-8'))
+                expires_ms = jwt_payload.get('exp', 0) * 1000
+                all_tokens.append((expires_ms, t))
+            except: pass
+
+    if not all_tokens:
+        print("Could not intercept token. Make sure Zed is logged in.")
+        sys.exit(1)
+        
+    # Sort tokens to pick the one that expires furthest in the future (avoids selecting expired/stale tokens)
+    all_tokens.sort(key=lambda x: x[0], reverse=True)
+    expires_ms, token = all_tokens[0]
+    
+    import time as _time
+    print(f"Successfully intercepted active Zed session token.")
+    print(f"Token expires: {_time.strftime('%Y-%m-%d %H:%M', _time.localtime(expires_ms // 1000))}")
+    
+    # Intelligently resolve the target user's home directory
+    target_home = None
+    
+    # 1. Resolve from the owner UID of the scanned Zed processes
+    for pid in pids:
+        try:
+            stat_info = os.stat(f'/proc/{pid}')
+            target_home = pwd.getpwuid(stat_info.st_uid).pw_dir
+            if target_home:
+                break
+        except: pass
+        
+    # 2. Fall back to SUDO_USER environment variable
+    if not target_home:
+        sudo_user = os.environ.get("SUDO_USER")
+        if sudo_user:
+            try:
+                target_home = os.path.expanduser(f"~{sudo_user}")
+            except: pass
+            
+    # 3. Ultimate fallback to local user's home
+    if not target_home:
+        target_home = os.path.expanduser("~")
+        
+    auth_json_path = os.path.join(target_home, ".zed-proxy/auth.json")
+    try:
+        auth_data = json.load(open(auth_json_path)) if os.path.exists(auth_json_path) else {}
+    except: auth_data = {}
+    
+    auth_data["zed-ai"] = {
+        "methodID": "oauth", "type": "oauth",
+        "token": token, "expires": expires_ms
+    }
+    
+    parent_dir = os.path.dirname(auth_json_path)
+    os.makedirs(parent_dir, exist_ok=True)
+    
+    # Write atomically: write to a temp file then rename so the proxy's
+    # fs.watch never catches auth.json mid-write (avoids JSON parse errors).
+    tmp_path = auth_json_path + ".tmp"
+    with open(tmp_path, 'w') as f:
+        json.dump(auth_data, f, indent=2)
+    os.replace(tmp_path, auth_json_path)  # atomic on Linux
+        
+    # Correct ownership & permissions if running as root/sudo
+    if os.geteuid() == 0:
+        try:
+            # Get home directory's owner UID/GID to keep ownership matching the user
+            home_stat = os.stat(target_home)
+            target_uid = home_stat.st_uid
+            target_gid = home_stat.st_gid
+            
+            os.chown(auth_json_path, target_uid, target_gid)
+            os.chmod(auth_json_path, 0o600)  # Secure it: only user can read/write
+            os.chown(parent_dir, target_uid, target_gid)
+        except Exception as e:
+            print(f"Warning: Failed to set file ownership: {e}")
+            
+    print("Zed token has been synchronized with Pi.")
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,20 @@
+{
+  "theme": "high-contrast-dark",
+  "defaultProvider": "zed-ai",
+  "defaultModel": "zed-agent",
+  "compaction": {
+    "enabled": true
+  },
+  "defaultThinkingLevel": "low",
+  "hideThinkingBlock": true,
+  "quietStartup": true,
+  "editorPaddingX": 3,
+  "steeringMode": "one-at-a-time",
+  "autocompleteMaxVisible": 5,
+  "lastChangelogVersion": "0.80.2",
+  "enabledModels": [
+    "9router/oc/big-pickle",
+    "opencode/deepseek-v4-flash-free",
+    "zed-ai/zed-agent"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "providers": {
+    "zed-ai": {
+      "baseUrl": "http://localhost:5005",
+      "api": "anthropic-messages",
+      "apiKey": "foo",
+      "models": [
+        {
+          "id": "zed-agent",
+          "name": "Zed Agent (Sonnet 4.6)",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": null,
+            "minimal": null,
+            "low": "low",
+            "medium": null,
+            "high": null,
+            "xhigh": null
+          },
+          "input": ["text", "image"],
+          "contextWindow": 1000000,
+          "maxTokens": 64000
+        }
+      ]
+    },
+    "9router": {
+      "baseUrl": "http://localhost:20128/v1",
+      "api": "openai-completions",
+      "apiKey": "sk-71b6ab38b4a18435-h1a8cr-974b5777",
+      "models": [
+        {
+          "id": "oc/big-pickle",
+          "name": "Big Pickle",
+          "contextWindow": 200000,
+          "maxTokens": 64000,
+          "reasoning": false,
+          "input": ["text", "image"]
+        }
+      ]
+    }
+  }
+}

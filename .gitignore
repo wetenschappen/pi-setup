@@ -1,0 +1,12 @@
+# Secrets — not backed up
+**/auth.json
+
+# Python venv — reinstalled via pip
+.pi-pdf-venv/
+
+# Session history — ephemeral
+.pi/agent/sessions/
+
+# Temp files
+*.log
+/tmp/
